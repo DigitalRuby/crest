@@ -242,3 +242,19 @@ half3 OceanEmission(in const half3 i_view, in const half3 i_n_pixel, in const fl
 
 	return col;
 }
+
+// feel free to replace with your favorite asset
+#if defined(USE_EXTERNAL_SHADERS)
+
+fixed OceanExternalShadow(float3 worldPos, float shadowValue)
+{
+	return ComputeWeatherMakerShadows(worldPos, shadowValue, false); // true to sample shadow details, higher res shadow
+}
+
+fixed3 OceanExternalFog(fixed3 col, float3 worldPos)
+{
+	fixed4 fog = ComputeWeatherMakerFog(fixed4(col, 1.0), worldPos, true); // false for non-volumetric lighted fog
+	return fog.rgb; // ignore fog.a value
+}
+
+#endif

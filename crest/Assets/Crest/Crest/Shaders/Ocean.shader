@@ -221,8 +221,16 @@ Shader "Crest/Ocean"
 			#pragma enable_d3d11_debug_symbols
 			#endif
 
+			#define USE_EXTERNAL_SHADERS
+
 			#include "UnityCG.cginc"
 			#include "Lighting.cginc"
+
+#if defined(USE_EXTERNAL_SHADERS)
+
+			#include "../../../WeatherMaker/Prefab/Shaders/WeatherMakerFogExternalShaderInclude.cginc"
+
+#endif
 
 			struct Attributes
 			{
@@ -457,6 +465,13 @@ Shader "Crest/Ocean"
 				#endif // _FOAM_ON
 
 				// Compute color of ocean - in-scattered light + refracted scene
+
+#if defined(USE_EXTERNAL_SHADERS)
+
+				shadow *= OceanExternalShadow(input.worldPos, 1.0);
+
+#endif
+
 				half3 scatterCol = ScatterColour(input.worldPos, input.lodAlpha_worldXZUndisplaced_oceanDepth.w, _WorldSpaceCameraPos, lightDir, view, shadow.x, underwater, true, sss);
 				half3 col = OceanEmission(view, n_pixel, lightDir, input.grabPos, pixelZ, uvDepth, sceneZ, sceneZ01, bubbleCol, _Normals, _CameraDepthTexture, underwater, scatterCol);
 
@@ -480,8 +495,18 @@ Shader "Crest/Ocean"
 				// Fog
 				if (!underwater)
 				{
+
+#if defined(USE_EXTERNAL_SHADERS)
+
+					col = OceanExternalFog(col, input.worldPos);
+
+#else
+
 					// Above water - do atmospheric fog. If you are using a third party sky package such as Azure, replace this with their stuff!
 					UNITY_APPLY_FOG(input.fogCoord, col);
+
+#endif
+
 				}
 				else
 				{
