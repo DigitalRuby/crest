@@ -223,14 +223,14 @@ Shader "Crest/Ocean"
 
 			#define USE_EXTERNAL_SHADERS
 
-			#include "UnityCG.cginc"
-			#include "Lighting.cginc"
-
 #if defined(USE_EXTERNAL_SHADERS)
 
 			#include "../../../WeatherMaker/Prefab/Shaders/WeatherMakerFogExternalShaderInclude.cginc"
 
 #endif
+
+			#include "UnityCG.cginc"
+			#include "Lighting.cginc"
 
 			struct Attributes
 			{

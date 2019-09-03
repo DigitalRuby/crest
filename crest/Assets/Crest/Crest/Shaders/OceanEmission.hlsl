@@ -53,7 +53,7 @@ half3 ScatterColour(
 	in const bool i_underwater, in const bool i_outscatterLight, half sss)
 {
 	half depth;
-	half shadow = 1.0;
+	half shadow = i_shadow;
 	if (i_underwater)
 	{
 		// compute scatter colour from cam pos. two scenarios this can be called:
@@ -77,7 +77,6 @@ half3 ScatterColour(
 	{
 		// above water - take data from geometry
 		depth = i_surfaceOceanDepth;
-		shadow = i_shadow;
 	}
 
 	// base colour

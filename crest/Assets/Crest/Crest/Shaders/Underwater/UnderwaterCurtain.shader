@@ -48,6 +48,14 @@ Shader "Crest/Underwater Curtain"
 			#pragma enable_d3d11_debug_symbols
 			#endif
 
+			#define USE_EXTERNAL_SHADERS
+
+#if defined(USE_EXTERNAL_SHADERS)
+
+			#include "../../../../WeatherMaker/Prefab/Shaders/WeatherMakerFogExternalShaderInclude.cginc"
+
+#endif
+
 			#include "UnityCG.cginc"
 			#include "Lighting.cginc"
 			#include "../OceanLODData.hlsl"
@@ -187,10 +195,20 @@ Shader "Crest/Underwater Curtain"
 
 				// depth and shadow are computed in ScatterColour when underwater==true, using the LOD1 texture.
 				const float depth = 0.0;
-				const half shadow = 1.0;
+
+				half shadow;
+
+#if defined(USE_EXTERNAL_SHADERS)
+
+				shadow = OceanExternalShadow(input.positionWS, 1.0);
+
+#else
+
+				shadow = 1.0;
+
+#endif
 
 				const half3 scatterCol = ScatterColour(surfaceAboveCamPosWorld, depth, _WorldSpaceCameraPos, lightDir, view, shadow, true, true, sss);
-
 				half3 sceneColour = tex2D(_BackgroundTexture, input.grabPos.xy / input.grabPos.w).rgb;
 
 #if _CAUSTICS_ON
