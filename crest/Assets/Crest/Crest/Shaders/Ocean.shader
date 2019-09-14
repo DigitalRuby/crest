@@ -474,7 +474,7 @@ Shader "Crest/Ocean"
 
 #if defined(_FOAM_ON)
 
-				whiteFoamCol *= max(0.35, shadow.x);
+				whiteFoamCol *= max(0.5, shadow.x);
 
 #endif
 
