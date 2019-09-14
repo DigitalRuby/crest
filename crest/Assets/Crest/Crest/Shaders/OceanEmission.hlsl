@@ -252,8 +252,10 @@ fixed OceanExternalShadow(float3 worldPos, float shadowValue)
 
 fixed3 OceanExternalFog(fixed3 col, float3 worldPos)
 {
-	fixed4 fog = ComputeWeatherMakerFog(fixed4(col, 1.0), worldPos, true); // false for non-volumetric lighted fog
-	return fog.rgb; // ignore fog.a value
+	return col;
+	// TODO: Completely bugged, fix later...
+	//fixed4 fog = ComputeWeatherMakerFog(fixed4(col, 1.0), worldPos, true); // false for non-volumetric lighted fog
+	//return fog.rgb; // ignore fog.a value
 }
 
 #endif
