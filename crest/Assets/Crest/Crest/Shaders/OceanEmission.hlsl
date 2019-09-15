@@ -6,7 +6,7 @@ uniform half3 _Diffuse;
 uniform half3 _DiffuseGrazing;
 
 // this is copied from the render target by unity
-uniform sampler2D _BackgroundTexture;
+uniform sampler2D _CameraOpaqueTexture;
 
 #define DEPTH_OUTSCATTER_CONSTANT 0.25
 
@@ -104,7 +104,7 @@ half3 ScatterColour(
 
 		// Approximate subsurface scattering - add light when surface faces viewer. Use geometry normal - don't need high freqs.
 		half towardsSun = pow(max(0., dot(i_lightDir, -i_view)), _SubSurfaceSunFallOff);
-		half3 subsurface = (_SubSurfaceBase + _SubSurfaceSun * towardsSun) * _SubSurfaceColour.rgb * _LightColor0 * shadow;
+		half3 subsurface = (_SubSurfaceBase + _SubSurfaceSun * towardsSun) * _SubSurfaceColour.rgb * CREST_PRIMARY_DIR_LIGHT_COLOR * shadow;
 		if (!i_underwater)
 			subsurface *= (1.0 - v * v) * sss;
 		col += subsurface;
@@ -219,7 +219,7 @@ half3 OceanEmission(in const half3 i_view, in const half3 i_n_pixel, in const fl
 			uvBackgroundRefract = uvBackground;
 		}
 
-		sceneColour = tex2D(_BackgroundTexture, uvBackgroundRefract).rgb;
+		sceneColour = tex2D(_CameraOpaqueTexture, uvBackgroundRefract).rgb;
 #if _CAUSTICS_ON
 		ApplyCaustics(i_view, i_lightDir, i_sceneZ, i_normals, i_underwater, sceneColour);
 #endif
@@ -228,7 +228,7 @@ half3 OceanEmission(in const half3 i_view, in const half3 i_n_pixel, in const fl
 	else
 	{
 		half2 uvBackgroundRefractSky = uvBackground + _RefractionStrength * i_n_pixel.xz;
-		sceneColour = tex2D(_BackgroundTexture, uvBackgroundRefractSky).rgb;
+		sceneColour = tex2D(_CameraOpaqueTexture, uvBackgroundRefractSky).rgb;
 		depthFogDistance = i_pixelZ;
 		// keep alpha at 0 as UnderwaterReflection shader handles the blend
 		// appropriately when looking at water from below
@@ -242,20 +242,3 @@ half3 OceanEmission(in const half3 i_view, in const half3 i_n_pixel, in const fl
 	return col;
 }
 
-// feel free to replace with your favorite asset
-#if defined(USE_EXTERNAL_SHADERS)
-
-fixed OceanExternalShadow(float3 worldPos, float shadowValue)
-{
-	return max(0.2, ComputeWeatherMakerShadows(worldPos, shadowValue, false)); // true to sample shadow details, higher res shadow
-}
-
-fixed3 OceanExternalFog(fixed3 col, float3 worldPos)
-{
-	return col;
-	// TODO: Completely bugged, fix later...
-	//fixed4 fog = ComputeWeatherMakerFog(fixed4(col, 1.0), worldPos, true); // false for non-volumetric lighted fog
-	//return fog.rgb; // ignore fog.a value
-}
-
-#endif

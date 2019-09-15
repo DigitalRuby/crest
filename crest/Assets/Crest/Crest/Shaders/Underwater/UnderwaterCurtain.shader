@@ -20,12 +20,9 @@ Shader "Crest/Underwater Curtain"
 
 	SubShader
 	{
-		Tags{ "LightMode" = "ForwardBase" "Queue" = "Geometry+510" "IgnoreProjector" = "True" "RenderType" = "Opaque" }
+		Tags{ "Queue" = "Geometry+510" "IgnoreProjector" = "True" "RenderType" = "Opaque" }
 
-		GrabPass
-		{
-			"_BackgroundTexture"
-		}
+		GrabPass { "_CameraOpaqueTexture" }
 
 		Pass
 		{
@@ -48,16 +45,9 @@ Shader "Crest/Underwater Curtain"
 			#pragma enable_d3d11_debug_symbols
 			#endif
 
-			#define USE_EXTERNAL_SHADERS
-
-#if defined(USE_EXTERNAL_SHADERS)
-
-			#include "../../../../WeatherMaker/Prefab/Shaders/WeatherMakerFogExternalShaderInclude.cginc"
-
-#endif
-
 			#include "UnityCG.cginc"
 			#include "Lighting.cginc"
+			#include "../OceanExternal.hlsl"
 			#include "../OceanLODData.hlsl"
 			#include "UnderwaterShared.hlsl"
 
@@ -209,7 +199,7 @@ Shader "Crest/Underwater Curtain"
 #endif
 
 				const half3 scatterCol = ScatterColour(surfaceAboveCamPosWorld, depth, _WorldSpaceCameraPos, lightDir, view, shadow, true, true, sss);
-				half3 sceneColour = tex2D(_BackgroundTexture, input.grabPos.xy / input.grabPos.w).rgb;
+				half3 sceneColour = tex2D(_CameraOpaqueTexture, input.grabPos.xy / input.grabPos.w).rgb;
 
 #if _CAUSTICS_ON
 				if (sceneZ01 != 0.0)

@@ -188,8 +188,11 @@ namespace Crest
             _camReflections.cullingMatrix = _camReflections.projectionMatrix * _camReflections.worldToCameraMatrix;
 
             ForceDistanceCulling(_farClipPlane);
-            
-            _camReflections.Render();
+
+            if (WeatherMakerCommandBufferManagerScript.Instance != null)
+            {
+                WeatherMakerCommandBufferManagerScript.Instance.RenderCamera(_camReflections);
+            }
 
             GL.invertCulling = oldCulling;
 
@@ -331,12 +334,18 @@ namespace Crest
 
         private void OnEnable()
         {
-            WeatherMakerCommandBufferManagerScript.Instance.RegisterPreCull(CameraPreCull, this);
+            if (WeatherMakerCommandBufferManagerScript.Instance != null)
+            {
+                WeatherMakerCommandBufferManagerScript.Instance.RegisterPreCull(CameraPreCull, this);
+            }
         }
 
         private void OnDisable()
         {
-            WeatherMakerCommandBufferManagerScript.Instance.UnregisterPreCull(this);
+            if (WeatherMakerCommandBufferManagerScript.Instance != null)
+            {
+                WeatherMakerCommandBufferManagerScript.Instance.UnregisterPreCull(this);
+            }
 
             if (_camViewpoint != null)
             {
