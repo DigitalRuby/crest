@@ -358,7 +358,7 @@ MonoBehaviour:
   _stencil: 0
   _hideCameraGameobject: 1
   _allowMSAA: 0
-  _farClipPlane: 1000
+  _farClipPlane: 100000
   _forceForwardRenderingPath: 1
   _clearFlags: 2
   RefreshPerFrames: 1
@@ -2075,6 +2075,27 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 114189907102477492, guid: 66bd18e21212b8c4ab51a96f918b3197,
+        type: 3}
+      propertyPath: AllowCameras.Array.size
+      value: 8
+      objectReference: {fileID: 0}
+    - target: {fileID: 114189907102477492, guid: 66bd18e21212b8c4ab51a96f918b3197,
+        type: 3}
+      propertyPath: AllowCameras.Array.data[6]
+      value: 
+      objectReference: {fileID: 227134469}
+    - target: {fileID: 114189907102477492, guid: 66bd18e21212b8c4ab51a96f918b3197,
+        type: 3}
+      propertyPath: AllowCameras.Array.data[7]
+      value: 
+      objectReference: {fileID: 0}
+    - target: {fileID: 114189907102477492, guid: 66bd18e21212b8c4ab51a96f918b3197,
+        type: 3}
+      propertyPath: _PerformanceProfile
+      value: 
+      objectReference: {fileID: 11400000, guid: 089291179f29e1e4a8b209da46507efa,
+        type: 2}
     - target: {fileID: 33411116416943108, guid: 66bd18e21212b8c4ab51a96f918b3197,
         type: 3}
       propertyPath: m_Mesh
@@ -2152,6 +2173,16 @@ PrefabInstance:
       propertyPath: m_LocalScale.z
       value: 288
       objectReference: {fileID: 0}
+    - target: {fileID: 114575072518627650, guid: 66bd18e21212b8c4ab51a96f918b3197,
+        type: 3}
+      propertyPath: AllowReflections
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 114575072518627650, guid: 66bd18e21212b8c4ab51a96f918b3197,
+        type: 3}
+      propertyPath: FogRenderQueue
+      value: 17
+      objectReference: {fileID: 0}
     - target: {fileID: 33438033773191118, guid: 66bd18e21212b8c4ab51a96f918b3197,
         type: 3}
       propertyPath: m_Mesh
@@ -2172,37 +2203,6 @@ PrefabInstance:
       propertyPath: m_Mesh
       value: 
       objectReference: {fileID: 1772837180}
-    - target: {fileID: 114189907102477492, guid: 66bd18e21212b8c4ab51a96f918b3197,
-        type: 3}
-      propertyPath: AllowCameras.Array.size
-      value: 8
-      objectReference: {fileID: 0}
-    - target: {fileID: 114189907102477492, guid: 66bd18e21212b8c4ab51a96f918b3197,
-        type: 3}
-      propertyPath: AllowCameras.Array.data[6]
-      value: 
-      objectReference: {fileID: 227134469}
-    - target: {fileID: 114189907102477492, guid: 66bd18e21212b8c4ab51a96f918b3197,
-        type: 3}
-      propertyPath: AllowCameras.Array.data[7]
-      value: 
-      objectReference: {fileID: 0}
-    - target: {fileID: 114189907102477492, guid: 66bd18e21212b8c4ab51a96f918b3197,
-        type: 3}
-      propertyPath: _PerformanceProfile
-      value: 
-      objectReference: {fileID: 11400000, guid: 089291179f29e1e4a8b209da46507efa,
-        type: 2}
-    - target: {fileID: 114575072518627650, guid: 66bd18e21212b8c4ab51a96f918b3197,
-        type: 3}
-      propertyPath: AllowReflections
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 114575072518627650, guid: 66bd18e21212b8c4ab51a96f918b3197,
-        type: 3}
-      propertyPath: FogRenderQueue
-      value: 17
-      objectReference: {fileID: 0}
     m_RemovedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 66bd18e21212b8c4ab51a96f918b3197, type: 3}
 --- !u!108 &1825366051 stripped

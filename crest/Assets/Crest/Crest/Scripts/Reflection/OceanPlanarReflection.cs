@@ -5,6 +5,7 @@
 // This script originated from the unity standard assets. It has been modified heavily to be camera-centric (as opposed to
 // geometry-centric) and assumes a single main camera which simplifies the code.
 
+using DigitalRuby.WeatherMaker;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -127,8 +128,14 @@ namespace Crest
         {
             _lastRefreshOnFrame = currentframe;
         }
-        private void OnPreRender()
+
+        private void CameraPreCull(Camera camera)
         {
+            if (!gameObject.activeInHierarchy || WeatherMakerCommandBufferManagerScript.CameraStack > 1 || WeatherMakerScript.ShouldIgnoreCamera(this, camera, true))
+            {
+                return;
+            }
+
             if (!RequestRefresh(Time.renderedFrameCount))
                 return; //skip if not need to refresh on this frame
 
@@ -322,8 +329,15 @@ namespace Crest
             reflectionMat.m33 = 1F;
         }
 
+        private void OnEnable()
+        {
+            WeatherMakerCommandBufferManagerScript.Instance.RegisterPreCull(CameraPreCull, this);
+        }
+
         private void OnDisable()
         {
+            WeatherMakerCommandBufferManagerScript.Instance.UnregisterPreCull(this);
+
             if (_camViewpoint != null)
             {
                 PreparedReflections.Remove(_camViewpoint.GetInstanceID());

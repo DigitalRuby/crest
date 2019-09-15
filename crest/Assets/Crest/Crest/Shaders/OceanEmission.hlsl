@@ -247,7 +247,7 @@ half3 OceanEmission(in const half3 i_view, in const half3 i_n_pixel, in const fl
 
 fixed OceanExternalShadow(float3 worldPos, float shadowValue)
 {
-	return ComputeWeatherMakerShadows(worldPos, shadowValue, false); // true to sample shadow details, higher res shadow
+	return max(0.2, ComputeWeatherMakerShadows(worldPos, shadowValue, false)); // true to sample shadow details, higher res shadow
 }
 
 fixed3 OceanExternalFog(fixed3 col, float3 worldPos)
