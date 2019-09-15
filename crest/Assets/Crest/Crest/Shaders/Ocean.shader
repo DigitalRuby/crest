@@ -176,7 +176,7 @@ Shader "Crest/Ocean"
 		// ForwardBase - tell unity we're going to render water in forward manner and we're going to do lighting and it will set the appropriate uniforms
 		// Geometry+510 - unity treats anything after Geometry+500 as transparent, and will render it in a forward manner and copy out the gbuffer data
 		//     and do post processing before running it. Discussion of this in issue #53.
-		Tags { "Queue"="Geometry+510" "IgnoreProjector"="True" "RenderType"="Opaque" }
+		Tags { "Queue"="Geometry+499" "IgnoreProjector"="True" "RenderType"="Opaque" }
 
 		GrabPass { "_CameraOpaqueTexture" }
 
