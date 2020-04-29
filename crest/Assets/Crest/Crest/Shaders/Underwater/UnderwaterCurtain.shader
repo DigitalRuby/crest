@@ -20,9 +20,12 @@ Shader "Crest/Underwater Curtain"
 
 	SubShader
 	{
-		Tags{ "Queue" = "Geometry+510" "IgnoreProjector" = "True" "RenderType" = "Opaque" }
+		Tags{ "LightMode" = "ForwardBase" "Queue" = "Geometry+510" "IgnoreProjector" = "True" "RenderType" = "Opaque" }
 
-		GrabPass { "_CameraOpaqueTexture" }
+		GrabPass
+		{
+			"_BackgroundTexture"
+		}
 
 		Pass
 		{
@@ -186,17 +189,11 @@ Shader "Crest/Underwater Curtain"
 
 				// depth and shadow are computed in ScatterColour when underwater==true, using the LOD1 texture.
 				const float depth = 0.0;
+				const half shadow = 1.0;
 
 				const half3 scatterCol = ScatterColour(depth, _WorldSpaceCameraPos, lightDir, view, shadow, true, true, sss);
 
-#else
-
-				shadow = 1.0;
-
-#endif
-
-				const half3 scatterCol = ScatterColour(surfaceAboveCamPosWorld, depth, _WorldSpaceCameraPos, lightDir, view, shadow, true, true, sss);
-				half3 sceneColour = tex2D(_CameraOpaqueTexture, input.grabPos.xy / input.grabPos.w).rgb;
+				half3 sceneColour = tex2D(_BackgroundTexture, input.grabPos.xy / input.grabPos.w).rgb;
 
 #if _CAUSTICS_ON
 				if (sceneZ01 != 0.0)

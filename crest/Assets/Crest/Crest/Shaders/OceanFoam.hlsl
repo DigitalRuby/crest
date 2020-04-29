@@ -21,8 +21,6 @@ uniform half _WaveFoamSpecularFallOff;
 uniform half _WaveFoamSpecularBoost;
 uniform half _WaveFoamLightScale;
 
-#define CREST_OCEAN_MIN_FOAM_INTENSITY 0.2
-
 half3 AmbientLight()
 {
 	return half3(unity_SHAr.w, unity_SHAg.w, unity_SHAb.w);
@@ -77,12 +75,12 @@ void ComputeFoam(half i_foam, float2 i_worldXZUndisplaced, float2 i_worldXZ, hal
 	half dfdx = whiteFoam_x - whiteFoam, dfdz = whiteFoam_z - whiteFoam;
 	half3 fN = normalize(i_n + _WaveFoamNormalStrength * half3(-dfdx, 0., -dfdz));
 	// do simple NdL and phong lighting
-	half foamNdL = max(CREST_OCEAN_MIN_FOAM_INTENSITY, dot(fN, i_lightDir));
-	o_whiteFoamCol.rgb = _FoamWhiteColor.rgb * (AmbientLight() + _WaveFoamLightScale * CREST_PRIMARY_DIR_LIGHT_COLOR * foamNdL * i_shadow);
+	half foamNdL = max(0., dot(fN, i_lightDir));
+	o_whiteFoamCol.rgb = _FoamWhiteColor.rgb * (AmbientLight() + _WaveFoamLightScale * _LightColor0 * foamNdL * i_shadow);
 	half3 refl = reflect(-i_view, fN);
-	o_whiteFoamCol.rgb += pow(max(CREST_OCEAN_MIN_FOAM_INTENSITY, dot(refl, i_lightDir)), _WaveFoamSpecularFallOff) * _WaveFoamSpecularBoost * CREST_PRIMARY_DIR_LIGHT_COLOR * i_shadow;
+	o_whiteFoamCol.rgb += pow(max(0., dot(refl, i_lightDir)), _WaveFoamSpecularFallOff) * _WaveFoamSpecularBoost * _LightColor0 * i_shadow;
 #else // _FOAM3DLIGHTING_ON
-	o_whiteFoamCol.rgb = _FoamWhiteColor.rgb * (AmbientLight() + _WaveFoamLightScale * CREST_PRIMARY_DIR_LIGHT_COLOR * i_shadow);
+	o_whiteFoamCol.rgb = _FoamWhiteColor.rgb * (AmbientLight() + _WaveFoamLightScale * _LightColor0 * i_shadow);
 #endif // _FOAM3DLIGHTING_ON
 
 	o_whiteFoamCol.a = _FoamWhiteColor.a * whiteFoam;

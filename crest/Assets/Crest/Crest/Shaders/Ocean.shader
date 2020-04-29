@@ -187,9 +187,12 @@ Shader "Crest/Ocean"
 		// ForwardBase - tell unity we're going to render water in forward manner and we're going to do lighting and it will set the appropriate uniforms
 		// Geometry+510 - unity treats anything after Geometry+500 as transparent, and will render it in a forward manner and copy out the gbuffer data
 		//     and do post processing before running it. Discussion of this in issue #53.
-		Tags { "Queue"="Geometry+499" "IgnoreProjector"="True" "RenderType"="Opaque" }
+		Tags { "LightMode"="ForwardBase" "Queue"="Geometry+510" "IgnoreProjector"="True" "RenderType"="Opaque" }
 
-		GrabPass { "_CameraOpaqueTexture" }
+		GrabPass
+		{
+			"_BackgroundTexture"
+		}
 
 		Pass
 		{
@@ -231,7 +234,6 @@ Shader "Crest/Ocean"
 			#pragma enable_d3d11_debug_symbols
 			#endif
 
-			#include "OceanExternal.hlsl"
 			#include "UnityCG.cginc"
 			#include "Lighting.cginc"
 
@@ -391,6 +393,17 @@ Shader "Crest/Ocean"
 			// i'm not sure why cracks are not visible in this case.
 			uniform float _ForceUnderwater;
 
+			float3 WorldSpaceLightDir(float3 worldPos)
+			{
+				float3 lightDir = _WorldSpaceLightPos0.xyz;
+				if (_WorldSpaceLightPos0.w > 0.)
+				{
+					// non-directional light - this is a position, not a direction
+					lightDir = normalize(lightDir - worldPos.xyz);
+				}
+				return lightDir;
+			}
+
 			bool IsUnderwater(const float facing)
 			{
 #if !_UNDERWATER_ON
@@ -414,7 +427,7 @@ Shader "Crest/Ocean"
 				float sceneZ01 = tex2D(_CameraDepthTexture, uvDepth).x;
 				float sceneZ = LinearEyeDepth(sceneZ01);
 
-				float3 lightDir = CrestWorldSpaceLightDir(input.worldPos);
+				float3 lightDir = WorldSpaceLightDir(input.worldPos);
 				// Soft shadow, hard shadow
 				fixed2 shadow = (fixed2)1.0
 				#if _SHADOWS_ON
@@ -474,7 +487,6 @@ Shader "Crest/Ocean"
 				// Compute color of ocean - in-scattered light + refracted scene
 				half3 scatterCol = ScatterColour(input.lodAlpha_worldXZUndisplaced_oceanDepth.w, _WorldSpaceCameraPos, lightDir, view, shadow.x, underwater, true, sss);
 				half3 col = OceanEmission(view, n_pixel, lightDir, input.grabPos, pixelZ, uvDepth, sceneZ, sceneZ01, bubbleCol, _Normals, _CameraDepthTexture, underwater, scatterCol);
-				col *= shadow.x;
 
 				// Light that reflects off water surface
 
@@ -506,18 +518,8 @@ Shader "Crest/Ocean"
 				// Fog
 				if (!underwater)
 				{
-
-#if defined(USE_EXTERNAL_SHADERS)
-
-					col = OceanExternalFog(col, input.worldPos);
-
-#else
-
 					// Above water - do atmospheric fog. If you are using a third party sky package such as Azure, replace this with their stuff!
 					UNITY_APPLY_FOG(input.fogCoord, col);
-
-#endif
-
 				}
 				else
 				{
