@@ -191,7 +191,7 @@ Shader "Crest/Ocean"
 
 		GrabPass
 		{
-			"_BackgroundTexture"
+			"_CameraOpaqueTexture"
 		}
 
 		Pass
@@ -427,7 +427,7 @@ Shader "Crest/Ocean"
 				float sceneZ01 = tex2D(_CameraDepthTexture, uvDepth).x;
 				float sceneZ = LinearEyeDepth(sceneZ01);
 
-				float3 lightDir = WorldSpaceLightDir(input.worldPos);
+				float3 lightDir = OceanLightDir(input.worldPos);
 				// Soft shadow, hard shadow
 				fixed2 shadow = (fixed2)1.0
 				#if _SHADOWS_ON
@@ -484,6 +484,12 @@ Shader "Crest/Ocean"
 				#endif // _FLOW_ON
 				#endif // _FOAM_ON
 
+#if defined(USE_EXTERNAL_SHADERS)
+
+				shadow *= OceanExternalShadow(input.worldPos, 1.0);
+
+#endif
+
 				// Compute color of ocean - in-scattered light + refracted scene
 				half3 scatterCol = ScatterColour(input.lodAlpha_worldXZUndisplaced_oceanDepth.w, _WorldSpaceCameraPos, lightDir, view, shadow.x, underwater, true, sss);
 				half3 col = OceanEmission(view, n_pixel, lightDir, input.grabPos, pixelZ, uvDepth, sceneZ, sceneZ01, bubbleCol, _Normals, _CameraDepthTexture, underwater, scatterCol);
@@ -512,14 +518,25 @@ Shader "Crest/Ocean"
 
 				// Override final result with white foam - bubbles on surface
 				#if _FOAM_ON
+				whiteFoamCol *= max(0.5, shadow.x);
 				col = lerp(col, whiteFoamCol.rgb, whiteFoamCol.a);
 				#endif
 
 				// Fog
 				if (!underwater)
 				{
-					// Above water - do atmospheric fog. If you are using a third party sky package such as Azure, replace this with their stuff!
+
+#if defined(USE_EXTERNAL_SHADERS)
+
+					col = OceanExternalFog(col, input.worldPos);
+
+#else
+
+					// Above water - do atmospheric fog. If you are using a third party sky package such as Weather Maker, replace this with their stuff!
 					UNITY_APPLY_FOG(input.fogCoord, col);
+
+#endif
+
 				}
 				else
 				{

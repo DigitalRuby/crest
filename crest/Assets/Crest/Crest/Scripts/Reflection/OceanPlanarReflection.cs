@@ -10,6 +10,7 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
+using DigitalRuby.WeatherMaker;
 
 namespace Crest
 {
@@ -149,7 +150,7 @@ namespace Crest
             _lastRefreshOnFrame = currentframe;
         }
 
-        private void OnPreRender()
+        private void RenderReflection()
         {
             if (!RequestRefresh(Time.renderedFrameCount))
                 return; // Skip if not need to refresh on this frame
@@ -376,6 +377,23 @@ namespace Crest
                 Destroy(_camReflections.gameObject);
                 _camReflections = null;
             }
+
+            WeatherMakerCommandBufferManagerScript.Instance.UnregisterPreCull(this);
+        }
+
+        private void OnEnable()
+        {
+            WeatherMakerCommandBufferManagerScript.Instance.RegisterPreCull(CameraPreCull, this);
+        }
+
+        private void CameraPreCull(Camera camera)
+        {
+            if (!gameObject.activeInHierarchy || WeatherMakerCommandBufferManagerScript.CameraStack > 1 || WeatherMakerScript.ShouldIgnoreCamera(this, camera, true))
+            {
+                return;
+            }
+
+            RenderReflection();
         }
     }
 }

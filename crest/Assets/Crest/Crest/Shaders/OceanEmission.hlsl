@@ -9,7 +9,7 @@ uniform half3 _Diffuse;
 uniform half3 _DiffuseGrazing;
 
 // this is copied from the render target by unity
-uniform sampler2D _BackgroundTexture;
+uniform sampler2D _CameraOpaqueTexture;
 
 #if _TRANSPARENCY_ON
 uniform half _RefractionStrength;
@@ -53,7 +53,7 @@ half3 ScatterColour(
 	in const bool i_underwater, in const bool i_outscatterLight, half sss)
 {
 	half depth;
-	half shadow = 1.0;
+	half shadow = i_shadow;
 	if (i_underwater)
 	{
 		// compute scatter colour from cam pos. two scenarios this can be called:
@@ -114,13 +114,14 @@ half3 ScatterColour(
 
 		// Approximate subsurface scattering - add light when surface faces viewer. Use geometry normal - don't need high freqs.
 		half towardsSun = pow(max(0., dot(i_lightDir, -i_view)), _SubSurfaceSunFallOff);
-		half3 subsurface = (_SubSurfaceBase + _SubSurfaceSun * towardsSun) * _SubSurfaceColour.rgb * _LightColor0 * shadow;
+		half3 subsurface = (_SubSurfaceBase + _SubSurfaceSun * towardsSun) * _SubSurfaceColour.rgb * OceanLightColor() * shadow;
 		if (!i_underwater)
 			subsurface *= (1.0 - v * v) * sss;
 		col += subsurface;
 	}
 #endif // _SUBSURFACESCATTERING_ON
 
+	col *= (i_lightDir.y > -0.05);
 	return col;
 }
 
@@ -218,7 +219,7 @@ half3 OceanEmission(in const half3 i_view, in const half3 i_n_pixel, in const fl
 			uvBackgroundRefract = uvBackground;
 		}
 
-		sceneColour = tex2D(_BackgroundTexture, uvBackgroundRefract).rgb;
+		sceneColour = tex2D(_CameraOpaqueTexture, uvBackgroundRefract).rgb;
 #if _CAUSTICS_ON
 		ApplyCaustics(i_view, i_lightDir, i_sceneZ, i_normals, i_underwater, sceneColour);
 #endif
@@ -227,7 +228,7 @@ half3 OceanEmission(in const half3 i_view, in const half3 i_n_pixel, in const fl
 	else
 	{
 		half2 uvBackgroundRefractSky = uvBackground + _RefractionStrength * i_n_pixel.xz;
-		sceneColour = tex2D(_BackgroundTexture, uvBackgroundRefractSky).rgb;
+		sceneColour = tex2D(_CameraOpaqueTexture, uvBackgroundRefractSky).rgb;
 		depthFogDistance = i_pixelZ;
 		// keep alpha at 0 as UnderwaterReflection shader handles the blend
 		// appropriately when looking at water from below

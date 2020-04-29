@@ -1,0 +1,133 @@
+Here are the changes made to make crest work with Weather Maker:
+
+--- PROJECT CHANGES ---
+
+- To get crest to see Weather Maker, you need to add an assembly definition for Weather Maker to the WeatherMaker/Prefab/Scripts folder, then add it as a reference to crests assembly definition file located in Crest/Scripts.
+
+- Enable planar reflection in crest by adding planar reflection to camera
+
+- Enable planar reflection on ocean underwater material
+
+- Add reflection probe to camera object, set to real-time every frame, one slice per frame, box size 1024
+
+- Add trigger sphere collider and kinematic rigid body to camera
+
+- Assign primary light to weather maker sun. For night scene, assign the moon as the primary light.
+
+- Add a giant plane at about y -20 to act as a depth buffer if you will be showing fog
+
+- Change Weather Maker full screen fog script render queue to after forward alpha
+
+- Change OceanPlanarReflection.cs to use CameraPreCull on WeatherMakerCommandBufferManagerScript to render the reflection.
+
+--- SHADER CHANGES ---
+
+- Replace instances of _BackgroundTexture to _CameraOpaqueTexture in all crest shaders
+
+- Replace instances of _LightColor0 to OceanLightColor()
+
+- Change OceanReflection.hlsl line 34 to saturate the reflection value
+
+- Change OceanReflection.hlsl line 126 to do pow(i_shadow, 3.0) to increase shadow effect
+
+- Change line 56 of OceanEmission.hlsl to:
+
+half shadow = i_shadow;
+
+- Insert before line 124 of OceanEmission.hlsl:
+
+	col *= (i_lightDir.y > -0.05);
+
+- Insert before line 487 of Ocean.shader:
+
+#if defined(USE_EXTERNAL_SHADERS)
+
+				shadow *= OceanExternalShadow(input.worldPos, 1.0);
+
+#endif
+
+- Inert before line 521 in Ocean.shader:
+
+whiteFoamCol *= max(0.5, shadow.x);
+
+- Replace line 528 in Ocean.shader to:
+
+#if defined(USE_EXTERNAL_SHADERS)
+
+					col = OceanExternalFog(col, input.worldPos);
+
+#else
+
+					// Above water - do atmospheric fog. If you are using a third party sky package such as Weather Maker, replace this with their stuff!
+					UNITY_APPLY_FOG(input.fogCoord, col);
+
+#endif
+
+- Chane line 192 of UnderwaterCurtain.shader to:
+
+			half shadow;
+
+#if defined(USE_EXTERNAL_SHADERS)
+
+				shadow = OceanExternalShadow(input.positionWS, 1.0);
+
+#else
+
+				shadow = 1.0;
+
+#endif
+
+- Add to end of OceanGlobals.hlsl:
+
+#define USE_EXTERNAL_SHADERS
+
+#if defined(USE_EXTERNAL_SHADERS)
+
+#include "../../../WeatherMaker/Prefab/Shaders/WeatherMakerFogExternalShaderInclude.cginc"
+
+fixed OceanExternalShadow(float3 worldPos, float shadowValue)
+{
+	return ComputeWeatherMakerShadows(worldPos, shadowValue, false); // true to sample shadow details, higher res shadow
+}
+
+fixed3 OceanExternalFog(fixed3 col, float3 worldPos)
+{
+	return col;
+
+	// does not look right at all, TODO: investigate
+	//fixed4 fog = ComputeWeatherMakerFog(fixed4(col, 1.0), worldPos, false); // false for non-volumetric lighted fog
+	//return fog.rgb;
+}
+
+fixed3 OceanLightColor()
+{
+	return _WeatherMakerDirLightColor[0].rgb * _WeatherMakerDirLightColor[0].a;
+}
+
+float3 OceanLightDir(float3 worldPos)
+{
+	return _WeatherMakerDirLightPosition[0].xyz;
+}
+
+#else
+
+float3 OceanLightDir(float3 worldPos)
+{
+	float3 lightDir = _WorldSpaceLightPos0.xyz;
+	if (_WorldSpaceLightPos0.w > 0.)
+	{
+		// non-directional light - this is a position, not a direction
+		lightDir = normalize(lightDir - worldPos.xyz);
+	}
+	return lightDir;
+
+}
+
+fixed3 OceanLightColor()
+{
+	return _LightColor0;
+}
+
+#endif
+
+

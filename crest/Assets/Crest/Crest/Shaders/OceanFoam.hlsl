@@ -76,11 +76,11 @@ void ComputeFoam(half i_foam, float2 i_worldXZUndisplaced, float2 i_worldXZ, hal
 	half3 fN = normalize(i_n + _WaveFoamNormalStrength * half3(-dfdx, 0., -dfdz));
 	// do simple NdL and phong lighting
 	half foamNdL = max(0., dot(fN, i_lightDir));
-	o_whiteFoamCol.rgb = _FoamWhiteColor.rgb * (AmbientLight() + _WaveFoamLightScale * _LightColor0 * foamNdL * i_shadow);
+	o_whiteFoamCol.rgb = _FoamWhiteColor.rgb * (AmbientLight() + _WaveFoamLightScale * OceanLightColor() * foamNdL * i_shadow);
 	half3 refl = reflect(-i_view, fN);
-	o_whiteFoamCol.rgb += pow(max(0., dot(refl, i_lightDir)), _WaveFoamSpecularFallOff) * _WaveFoamSpecularBoost * _LightColor0 * i_shadow;
+	o_whiteFoamCol.rgb += pow(max(0., dot(refl, i_lightDir)), _WaveFoamSpecularFallOff) * _WaveFoamSpecularBoost * OceanLightColor() * i_shadow;
 #else // _FOAM3DLIGHTING_ON
-	o_whiteFoamCol.rgb = _FoamWhiteColor.rgb * (AmbientLight() + _WaveFoamLightScale * _LightColor0 * i_shadow);
+	o_whiteFoamCol.rgb = _FoamWhiteColor.rgb * (AmbientLight() + _WaveFoamLightScale * OceanLightColor() * i_shadow);
 #endif // _FOAM3DLIGHTING_ON
 
 	o_whiteFoamCol.a = _FoamWhiteColor.a * whiteFoam;
