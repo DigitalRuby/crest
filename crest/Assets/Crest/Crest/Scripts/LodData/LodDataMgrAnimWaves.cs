@@ -32,7 +32,14 @@ namespace Crest
         /// </summary>
         public static bool _shapeCombinePass = true;
 
+        /// <summary>
+        /// Ping pong between render targets to do the combine. Disabling this uses a compute shader instead which doesn't need
+        /// to copy back and forth between targets, but has dodgy historical support as pre-DX11.3 hardware may not support typed UAV loads.
+        /// </summary>
+        public static bool _shapeCombinePassPingPong = true;
+
         RenderTexture _waveBuffers;
+        RenderTexture _combineBuffer;
 
         const string ShaderName = "ShapeCombine";
 
@@ -47,8 +54,11 @@ namespace Crest
 
         ComputeShader _combineShader;
         PropertyWrapperCompute _combineProperties;
+        PropertyWrapperMaterial[] _combineMaterial;
 
-        static int sp_LD_TexArray_AnimatedWaves_Compute = Shader.PropertyToID("_LD_TexArray_AnimatedWaves_Compute");
+        readonly int sp_LD_TexArray_AnimatedWaves_Compute = Shader.PropertyToID("_LD_TexArray_AnimatedWaves_Compute");
+        readonly int sp_LD_TexArray_WaveBuffer = Shader.PropertyToID("_LD_TexArray_WaveBuffer");
+        const string s_textureArrayName = "_LD_TexArray_AnimatedWaves";
 
         public override void UseSettings(SimSettingsBase settings) { OceanRenderer.Instance._simSettingsAnimatedWaves = settings as SimSettingsAnimatedWaves; }
         public override SimSettingsBase CreateDefaultSettings()
@@ -66,7 +76,28 @@ namespace Crest
             // different animated wave LODs. As we use a single texture array
             // for all LODs, we employ a compute shader as only they can
             // read and write to the same texture.
-            _combineShader = Resources.Load<ComputeShader>(ShaderName);
+
+            int resolution = OceanRenderer.Instance.LodDataResolution;
+            var desc = new RenderTextureDescriptor(resolution, resolution, TextureFormat, 0);
+
+            _waveBuffers = CreateLodDataTextures(desc, "WaveBuffer", false);
+
+            _combineBuffer = CreateCombineBuffer(desc);
+
+            var combineShader = Shader.Find("Hidden/Crest/Simulation/Combine Animated Wave LODs");
+            _combineMaterial = new PropertyWrapperMaterial[OceanRenderer.Instance.CurrentLodCount];
+            for (int i = 0; i < _combineMaterial.Length; i++)
+            {
+                var mat = new Material(combineShader);
+                _combineMaterial[i] = new PropertyWrapperMaterial(mat);
+            }
+
+            _combineShader = ComputeShaderHelpers.LoadShader(ShaderName);
+            if(_combineShader == null)
+            {
+                enabled = false;
+                return;
+            }
             krnl_ShapeCombine = _combineShader.FindKernel("ShapeCombine");
             krnl_ShapeCombine_DISABLE_COMBINE = _combineShader.FindKernel("ShapeCombine_DISABLE_COMBINE");
             krnl_ShapeCombine_FLOW_ON = _combineShader.FindKernel("ShapeCombine_FLOW_ON");
@@ -76,11 +107,22 @@ namespace Crest
             krnl_ShapeCombine_FLOW_ON_DYNAMIC_WAVE_SIM_ON = _combineShader.FindKernel("ShapeCombine_FLOW_ON_DYNAMIC_WAVE_SIM_ON");
             krnl_ShapeCombine_FLOW_ON_DYNAMIC_WAVE_SIM_ON_DISABLE_COMBINE = _combineShader.FindKernel("ShapeCombine_FLOW_ON_DYNAMIC_WAVE_SIM_ON_DISABLE_COMBINE");
             _combineProperties = new PropertyWrapperCompute();
+        }
 
-            int resolution = OceanRenderer.Instance.LodDataResolution;
-            var desc = new RenderTextureDescriptor(resolution, resolution, TextureFormat, 0);
-
-            _waveBuffers = CreateLodDataTextures(desc, "WaveBuffer", false);
+        RenderTexture CreateCombineBuffer(RenderTextureDescriptor desc)
+        {
+            RenderTexture result = new RenderTexture(desc);
+            result.wrapMode = TextureWrapMode.Clamp;
+            result.antiAliasing = 1;
+            result.filterMode = FilterMode.Bilinear;
+            result.anisoLevel = 0;
+            result.useMipMap = false;
+            result.name = "CombineBuffer";
+            result.dimension = TextureDimension.Tex2D;
+            result.volumeDepth = 1;
+            result.enableRandomWrite = false;
+            result.Create();
+            return result;
         }
 
         // Filter object for assigning shapes to LODs. This was much more elegant with a lambda but it generated garbage.
@@ -97,10 +139,10 @@ namespace Crest
                 var drawOctaveWavelength = data.Wavelength;
                 isTransition = 0;
 
-                // No wavelength preference
+                // No wavelength preference - don't draw per-lod
                 if (drawOctaveWavelength == 0f)
                 {
-                    return 1f;
+                    return 0f;
                 }
 
                 // Too small for this lod
@@ -150,9 +192,14 @@ namespace Crest
 
             var lodCount = OceanRenderer.Instance.CurrentLodCount;
 
+            // Validation
+            for (int lodIdx = 0; lodIdx < OceanRenderer.Instance.CurrentLodCount; lodIdx++)
+            {
+                OceanRenderer.Instance._lodTransform._renderData[lodIdx].Validate(0, this);
+            }
+
             // lod-dependent data
             _filterWavelength._lodCount = lodCount;
-
             for (int lodIdx = lodCount - 1; lodIdx >= 0; lodIdx--)
             {
                 buf.SetRenderTarget(_waveBuffers, 0, CubemapFace.Unknown, lodIdx);
@@ -165,6 +212,85 @@ namespace Crest
                 _filterWavelength._globalMaxWavelength = OceanRenderer.Instance._lodTransform.MaxWavelength(OceanRenderer.Instance.CurrentLodCount - 1);
                 SubmitDrawsFiltered(lodIdx, buf, _filterWavelength);
             }
+
+            // Combine the LODs - copy results from biggest LOD down to LOD 0
+            if (_shapeCombinePassPingPong)
+            {
+                CombinePassPingPong(buf);
+            }
+            else
+            {
+                CombinePassCompute(buf);
+            }
+
+            // lod-independent data
+            for (int lodIdx = lodCount - 1; lodIdx >= 0; lodIdx--)
+            {
+                buf.SetRenderTarget(_targets, 0, CubemapFace.Unknown, lodIdx);
+
+                // draw any data that did not express a preference for one lod or another
+                SubmitDrawsFiltered(lodIdx, buf, _filterNoLodPreference);
+            }
+        }
+
+        void CombinePassPingPong(CommandBuffer buf)
+        {
+            var lodCount = OceanRenderer.Instance.CurrentLodCount;
+            const int shaderPassCombineIntoAux = 0, shaderPassCopyResultBack = 1;
+
+            // combine waves
+            for (int lodIdx = lodCount - 1; lodIdx >= 0; lodIdx--)
+            {
+                // The per-octave wave buffers
+                BindWaveBuffer(_combineMaterial[lodIdx], false);
+
+                // Bind this LOD data (displacements). Option to disable the combine pass - very useful debugging feature.
+                if (_shapeCombinePass)
+                {
+                    BindResultData(_combineMaterial[lodIdx]);
+                }
+                else
+                {
+                    BindNull(_combineMaterial[lodIdx]);
+                }
+
+                // Dynamic waves
+                if (OceanRenderer.Instance._lodDataDynWaves)
+                {
+                    OceanRenderer.Instance._lodDataDynWaves.BindCopySettings(_combineMaterial[lodIdx]);
+                    OceanRenderer.Instance._lodDataDynWaves.BindResultData(_combineMaterial[lodIdx]);
+                }
+                else
+                {
+                    LodDataMgrDynWaves.BindNull(_combineMaterial[lodIdx]);
+                }
+
+                // Flow
+                if (OceanRenderer.Instance._lodDataFlow)
+                {
+                    OceanRenderer.Instance._lodDataFlow.BindResultData(_combineMaterial[lodIdx]);
+                }
+                else
+                {
+                    LodDataMgrFlow.BindNull(_combineMaterial[lodIdx]);
+                }
+
+                _combineMaterial[lodIdx].SetInt(sp_LD_SliceIndex, lodIdx);
+
+                // Combine this LOD's waves with waves from the LODs above into auxiliary combine buffer
+                buf.SetRenderTarget(_combineBuffer);
+                buf.DrawProcedural(Matrix4x4.identity, _combineMaterial[lodIdx].material, shaderPassCombineIntoAux, MeshTopology.Triangles, 3);
+
+                // Copy combine buffer back to lod texture array
+                buf.SetRenderTarget(_targets, 0, CubemapFace.Unknown, lodIdx);
+                _combineMaterial[lodIdx].SetTexture(Shader.PropertyToID("_CombineBuffer"), _combineBuffer);
+                buf.DrawProcedural(Matrix4x4.identity, _combineMaterial[lodIdx].material, shaderPassCopyResultBack, MeshTopology.Triangles, 3);
+            }
+        }
+
+        void CombinePassCompute(CommandBuffer buf)
+        {
+            var lodCount = OceanRenderer.Instance.CurrentLodCount;
 
             int combineShaderKernel = krnl_ShapeCombine;
             int combineShaderKernel_lastLOD = krnl_ShapeCombine_DISABLE_COMBINE;
@@ -204,10 +330,12 @@ namespace Crest
 
                 _combineProperties.Initialise(buf, _combineShader, selectedShaderKernel);
 
+                // The per-octave wave buffers
                 BindWaveBuffer(_combineProperties);
+                // Bind this LOD data (displacements)
                 BindResultData(_combineProperties);
 
-                // dynamic waves
+                // Dynamic waves
                 if (OceanRenderer.Instance._lodDataDynWaves)
                 {
                     OceanRenderer.Instance._lodDataDynWaves.BindCopySettings(_combineProperties);
@@ -218,7 +346,7 @@ namespace Crest
                     LodDataMgrDynWaves.BindNull(_combineProperties);
                 }
 
-                // flow
+                // Flow
                 if (OceanRenderer.Instance._lodDataFlow)
                 {
                     OceanRenderer.Instance._lodDataFlow.BindResultData(_combineProperties);
@@ -234,29 +362,15 @@ namespace Crest
                     DataTexture
                 );
 
-                _combineProperties.SetFloat(OceanRenderer.sp_LD_SliceIndex, lodIdx);
+                _combineProperties.SetInt(sp_LD_SliceIndex, lodIdx);
                 _combineProperties.DispatchShader();
-            }
-
-            // lod-independent data
-            for (int lodIdx = lodCount - 1; lodIdx >= 0; lodIdx--)
-            {
-                buf.SetRenderTarget(_targets, 0, CubemapFace.Unknown, lodIdx);
-
-                // draw any data that did not express a preference for one lod or another
-                SubmitDrawsFiltered(lodIdx, buf, _filterNoLodPreference);
             }
         }
 
         public void BindWaveBuffer(IPropertyWrapper properties, bool sourceLod = false)
         {
-            var lt = OceanRenderer.Instance._lodTransform;
-            for (int lodIdx = 0; lodIdx < OceanRenderer.Instance.CurrentLodCount; lodIdx++)
-            {
-                lt._renderData[lodIdx].Validate(0, this);
-            }
-            properties.SetTexture(Shader.PropertyToID("_LD_TexArray_WaveBuffer"), _waveBuffers);
-            BindData(properties, null, true, ref lt._renderData, sourceLod);
+            properties.SetTexture(sp_LD_TexArray_WaveBuffer, _waveBuffers);
+            BindData(properties, null, true, ref OceanRenderer.Instance._lodTransform._renderData, sourceLod);
         }
 
         protected override void BindData(IPropertyWrapper properties, Texture applyData, bool blendOut, ref LodTransform.RenderData[] renderData, bool sourceLod = false)
@@ -315,9 +429,8 @@ namespace Crest
             return -1;
         }
 
-        public static string TextureArrayName = "_LD_TexArray_AnimatedWaves";
-        private static TextureArrayParamIds textureArrayParamIds = new TextureArrayParamIds(TextureArrayName);
-        public static int ParamIdSampler(bool sourceLod = false) { return textureArrayParamIds.GetId(sourceLod); }
+        private static TextureArrayParamIds s_textureArrayParamIds = new TextureArrayParamIds(s_textureArrayName);
+        public static int ParamIdSampler(bool sourceLod = false) { return s_textureArrayParamIds.GetId(sourceLod); }
         protected override int GetParamIdSampler(bool sourceLod = false)
         {
             return ParamIdSampler(sourceLod);
@@ -325,6 +438,17 @@ namespace Crest
         public static void BindNull(IPropertyWrapper properties, bool sourceLod = false)
         {
             properties.SetTexture(ParamIdSampler(sourceLod), TextureArrayHelpers.BlackTextureArray);
+        }
+
+#if UNITY_2019_3_OR_NEWER
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+#endif
+        static void InitStatics()
+        {
+            // Init here from 2019.3 onwards
+            sp_LD_SliceIndex = Shader.PropertyToID("_LD_SliceIndex");
+            sp_LODChange = Shader.PropertyToID("_LODChange");
+            s_textureArrayParamIds = new TextureArrayParamIds(s_textureArrayName);
         }
     }
 }

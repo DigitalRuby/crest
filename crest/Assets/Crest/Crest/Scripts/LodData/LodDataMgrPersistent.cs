@@ -17,7 +17,7 @@ namespace Crest
         RenderTexture _sources;
         PropertyWrapperCompute _renderSimProperties;
 
-        static int sp_LD_TexArray_Target = Shader.PropertyToID("_LD_TexArray_Target");
+        readonly int sp_LD_TexArray_Target = Shader.PropertyToID("_LD_TexArray_Target");
 
         protected ComputeShader _shader;
 
@@ -26,8 +26,8 @@ namespace Crest
 
         float _substepDtPrevious = 1f / 60f;
 
-        static int sp_SimDeltaTime = Shader.PropertyToID("_SimDeltaTime");
-        static int sp_SimDeltaTimePrev = Shader.PropertyToID("_SimDeltaTimePrev");
+        readonly int sp_SimDeltaTime = Shader.PropertyToID("_SimDeltaTime");
+        readonly int sp_SimDeltaTimePrev = Shader.PropertyToID("_SimDeltaTimePrev");
 
         protected override void Start()
         {
@@ -38,7 +38,12 @@ namespace Crest
 
         void CreateProperties(int lodCount)
         {
-            _shader = Resources.Load<ComputeShader>(ShaderSim);
+            _shader = ComputeShaderHelpers.LoadShader(ShaderSim);
+            if(_shader == null)
+            {
+                enabled = false;
+                return;
+            }
             _renderSimProperties = new PropertyWrapperCompute();
         }
 
@@ -89,7 +94,7 @@ namespace Crest
 
             for (int stepi = 0; stepi < numSubsteps; stepi++)
             {
-                SwapRTs(ref _sources, ref _targets);
+                Swap(ref _sources, ref _targets);
 
                 _renderSimProperties.Initialise(buf, _shader, krnl_ShaderSim);
 
@@ -109,7 +114,7 @@ namespace Crest
 
                 SetAdditionalSimParams(_renderSimProperties);
 
-                buf.SetGlobalFloat(OceanRenderer.sp_LODChange, srcDataIdxChange);
+                buf.SetGlobalFloat(sp_LODChange, srcDataIdxChange);
 
                 _renderSimProperties.SetTexture(
                     sp_LD_TexArray_Target,

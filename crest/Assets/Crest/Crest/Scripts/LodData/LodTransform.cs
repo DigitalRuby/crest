@@ -130,7 +130,7 @@ namespace Crest
 
         public static int ParamIdPosScale(bool sourceLod = false)
         {
-            if(sourceLod)
+            if (sourceLod)
             {
                 return s_paramsPosScaleSource;
             }
@@ -142,7 +142,7 @@ namespace Crest
 
         public static int ParamIdOcean(bool sourceLod = false)
         {
-            if(sourceLod)
+            if (sourceLod)
             {
                 return s_paramsOceanSource;
             }
@@ -154,11 +154,23 @@ namespace Crest
 
         public void SetOrigin(Vector3 newOrigin)
         {
-            for(int lodIdx = 0; lodIdx < LodCount; lodIdx++)
+            for (int lodIdx = 0; lodIdx < LodCount; lodIdx++)
             {
                 _renderData[lodIdx]._posSnapped -= newOrigin;
                 _renderDataSource[lodIdx]._posSnapped -= newOrigin;
             }
+        }
+
+#if UNITY_2019_3_OR_NEWER
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+#endif
+        static void InitStatics()
+        {
+            // Init here from 2019.3 onwards
+            s_paramsPosScale = Shader.PropertyToID("_LD_Pos_Scale");
+            s_paramsPosScaleSource = Shader.PropertyToID("_LD_Pos_Scale_Source");
+            s_paramsOcean = Shader.PropertyToID("_LD_Params");
+            s_paramsOceanSource = Shader.PropertyToID("_LD_Params_Source");
         }
     }
 }

@@ -18,11 +18,12 @@ namespace Crest
         Vector3 _centerOfMass = Vector3.zero;
         [SerializeField, FormerlySerializedAs("ForcePoints")]
         FloaterForcePoints[] _forcePoints = new FloaterForcePoints[] { };
-        [SerializeField]
+
+        [Tooltip("Vertical offset for where engine force should be applied."), SerializeField]
         float _forceHeightOffset = 0f;
         [SerializeField]
         float _forceMultiplier = 10f;
-        [SerializeField]
+        [Tooltip("Width dimension of boat. The larger this value, the more filtered/smooth the wave response will be."), SerializeField]
         float _minSpatialLength = 12f;
         [SerializeField, Range(0, 1)]
         float _turningHeel = 0.35f;
@@ -42,9 +43,9 @@ namespace Crest
         float _turnPower = 0.5f;
         [SerializeField]
         bool _playerControlled = true;
-        [SerializeField]
+        [Tooltip("Used to automatically add throttle input"), SerializeField]
         float _engineBias = 0f;
-        [SerializeField]
+        [Tooltip("Used to automatically add turning input"), SerializeField]
         float _turnBias = 0f;
 
 
@@ -60,11 +61,13 @@ namespace Crest
         public override float ObjectWidth { get { return _minSpatialLength; } }
         public override bool InWater { get { return true; } }
 
-        SamplingData _samplingData = new SamplingData();
-        SamplingData _samplingDataFlow = new SamplingData();
-
-        Rect _localSamplingAABB;
         float _totalWeight;
+
+        Vector3[] _queryPoints;
+        Vector3[] _queryResultDisps;
+        Vector3[] _queryResultVels;
+
+        SampleFlowHelper _sampleFlowHelper = new SampleFlowHelper();
 
         private void Start()
         {
@@ -77,9 +80,11 @@ namespace Crest
                 return;
             }
 
-            _localSamplingAABB = ComputeLocalSamplingAABB();
-
             CalcTotalWeight();
+
+            _queryPoints = new Vector3[_forcePoints.Length + 1];
+            _queryResultDisps = new Vector3[_forcePoints.Length + 1];
+            _queryResultVels = new Vector3[_forcePoints.Length + 1];
         }
 
         void CalcTotalWeight()
@@ -98,58 +103,41 @@ namespace Crest
             CalcTotalWeight();
 #endif
 
-            // Trigger processing of displacement textures that have come back this frame. This will be processed
-            // anyway in Update(), but FixedUpdate() is earlier so make sure it's up to date now.
-            if (OceanRenderer.Instance._simSettingsAnimatedWaves.CollisionSource == SimSettingsAnimatedWaves.CollisionSources.OceanDisplacementTexturesGPU && GPUReadbackDisps.Instance)
-            {
-                GPUReadbackDisps.Instance.ProcessRequests();
-            }
-
             var collProvider = OceanRenderer.Instance.CollisionProvider;
-            var thisRect = GetWorldAABB();
-            if (!collProvider.GetSamplingData(ref thisRect, _minSpatialLength, _samplingData))
+
+            // Do queries
+            UpdateWaterQueries(collProvider);
+
+            _displacementToObject = _queryResultDisps[_forcePoints.Length];
+            var undispPos = transform.position - _queryResultDisps[_forcePoints.Length];
+            undispPos.y = OceanRenderer.Instance.SeaLevel;
+
+            var waterSurfaceVel = _queryResultVels[_forcePoints.Length];
+
+            if(QueryFlow.Instance)
             {
-                // No collision coverage for the sample area, in this case use the null provider.
-                collProvider = CollProviderNull.Instance;
+                _sampleFlowHelper.Init(transform.position, _minSpatialLength);
+                Vector2 surfaceFlow = Vector2.zero;
+                _sampleFlowHelper.Sample(ref surfaceFlow);
+                waterSurfaceVel += new Vector3(surfaceFlow.x, 0, surfaceFlow.y);
             }
 
-            var position = transform.position;
-            Vector3 undispPos;
-            if (!collProvider.ComputeUndisplacedPosition(ref position, _samplingData, out undispPos))
-            {
-                // If we couldn't get wave shape, assume flat water at sea level
-                undispPos = position;
-                undispPos.y = OceanRenderer.Instance.SeaLevel;
-            }
-
-            Vector3 displacement, waterSurfaceVel;
-            bool dispValid, velValid;
-            collProvider.SampleDisplacementVel(ref undispPos, _samplingData, out displacement, out dispValid, out waterSurfaceVel, out velValid);
-            if (dispValid)
-            {
-                _displacementToObject = displacement;
-            }
-
-            if (GPUReadbackFlow.Instance)
-            {
-                GPUReadbackFlow.Instance.ProcessRequests();
-
-                var flowRect = new Rect(position.x, position.z, 0f, 0f);
-                if (GPUReadbackFlow.Instance.GetSamplingData(ref flowRect, _minSpatialLength, _samplingDataFlow))
-                {
-                    Vector2 surfaceFlow;
-                    GPUReadbackFlow.Instance.SampleFlow(ref position, _samplingDataFlow, out surfaceFlow);
-                    waterSurfaceVel += new Vector3(surfaceFlow.x, 0, surfaceFlow.y);
-
-                    GPUReadbackFlow.Instance.ReturnSamplingData(_samplingDataFlow);
-                }
-            }
-
+            // Buoyancy
             FixedUpdateBuoyancy(collProvider);
             FixedUpdateDrag(collProvider, waterSurfaceVel);
             FixedUpdateEngine();
+        }
 
-            collProvider.ReturnSamplingData(_samplingData);
+        void UpdateWaterQueries(ICollProvider collProvider)
+        {
+            // Update query points
+            for (int i = 0; i < _forcePoints.Length; i++)
+            {
+                _queryPoints[i] = transform.TransformPoint(_forcePoints[i]._offsetPosition + new Vector3(0, _centerOfMass.y, 0));
+            }
+            _queryPoints[_forcePoints.Length] = transform.position;
+
+            collProvider.Query(GetHashCode(), ObjectWidth, _queryPoints, _queryResultDisps, null, _queryResultVels);
         }
 
         void FixedUpdateEngine()
@@ -168,29 +156,15 @@ namespace Crest
 
         void FixedUpdateBuoyancy(ICollProvider collProvider)
         {
-            float archimedesForceMagnitude = WATER_DENSITY * Mathf.Abs(Physics.gravity.y);
+            var archimedesForceMagnitude = WATER_DENSITY * Mathf.Abs(Physics.gravity.y);
 
             for (int i = 0; i < _forcePoints.Length; i++)
             {
-                FloaterForcePoints point = _forcePoints[i];
-                var transformedPoint = transform.TransformPoint(point._offsetPosition + new Vector3(0, _centerOfMass.y, 0));
-
-                Vector3 undispPos;
-                if (!collProvider.ComputeUndisplacedPosition(ref transformedPoint, _samplingData, out undispPos))
-                {
-                    // If we couldn't get wave shape, assume flat water at sea level
-                    undispPos = transformedPoint;
-                    undispPos.y = OceanRenderer.Instance.SeaLevel;
-                }
-
-                Vector3 displaced;
-                collProvider.SampleDisplacement(ref undispPos, _samplingData, out displaced);
-
-                var dispPos = undispPos + displaced;
-                var heightDiff = dispPos.y - transformedPoint.y;
+                var waterHeight = OceanRenderer.Instance.SeaLevel + _queryResultDisps[i].y;
+                var heightDiff = waterHeight - _queryPoints[i].y;
                 if (heightDiff > 0)
                 {
-                    _rb.AddForceAtPosition(archimedesForceMagnitude * heightDiff * Vector3.up * point._weight * _forceMultiplier / _totalWeight, transformedPoint);
+                    _rb.AddForceAtPosition(archimedesForceMagnitude * heightDiff * Vector3.up * _forcePoints[i]._weight * _forceMultiplier / _totalWeight, _queryPoints[i]);
                 }
             }
         }
@@ -198,15 +172,6 @@ namespace Crest
         void FixedUpdateDrag(ICollProvider collProvider, Vector3 waterSurfaceVel)
         {
             // Apply drag relative to water
-            var pos = _rb.position;
-            Vector3 undispPos;
-            if (!collProvider.ComputeUndisplacedPosition(ref pos, _samplingData, out undispPos))
-            {
-                // If we couldn't get wave shape, assume flat water at sea level
-                undispPos = pos;
-                undispPos.y = OceanRenderer.Instance.SeaLevel;
-            }
-
             var _velocityRelativeToWater = _rb.velocity - waterSurfaceVel;
 
             var forcePosition = _rb.position + _forceHeightOffset * Vector3.up;
@@ -229,36 +194,14 @@ namespace Crest
                 Gizmos.color = Color.red;
                 Gizmos.DrawCube(transformedPoint, Vector3.one * 0.5f);
             }
-
-            var worldAABB = GetWorldAABB();
-            new Bounds(new Vector3(worldAABB.center.x, 0f, worldAABB.center.y), Vector3.right * worldAABB.width + Vector3.forward * worldAABB.height).DebugDraw();
         }
 
-        Rect ComputeLocalSamplingAABB()
+        private void OnDisable()
         {
-            if (_forcePoints.Length == 0) return new Rect();
-
-            float xmin = _forcePoints[0]._offsetPosition.x;
-            float zmin = _forcePoints[0]._offsetPosition.z;
-            float xmax = xmin, zmax = zmin;
-            for (int i = 1; i < _forcePoints.Length; i++)
+            if (QueryDisplacements.Instance)
             {
-                float x = _forcePoints[i]._offsetPosition.x, z = _forcePoints[i]._offsetPosition.z;
-                xmin = Mathf.Min(xmin, x); xmax = Mathf.Max(xmax, x);
-                zmin = Mathf.Min(zmin, z); zmax = Mathf.Max(zmax, z);
+                QueryDisplacements.Instance.RemoveQueryPoints(GetHashCode());
             }
-
-            return Rect.MinMaxRect(xmin, zmin, xmax, zmax);
-        }
-
-        Rect GetWorldAABB()
-        {
-            Bounds b = new Bounds(transform.position, Vector3.one);
-            b.Encapsulate(transform.TransformPoint(new Vector3(_localSamplingAABB.xMin, 0f, _localSamplingAABB.yMin)));
-            b.Encapsulate(transform.TransformPoint(new Vector3(_localSamplingAABB.xMin, 0f, _localSamplingAABB.yMax)));
-            b.Encapsulate(transform.TransformPoint(new Vector3(_localSamplingAABB.xMax, 0f, _localSamplingAABB.yMin)));
-            b.Encapsulate(transform.TransformPoint(new Vector3(_localSamplingAABB.xMax, 0f, _localSamplingAABB.yMax)));
-            return Rect.MinMaxRect(b.min.x, b.min.z, b.max.x, b.max.z);
         }
     }
 

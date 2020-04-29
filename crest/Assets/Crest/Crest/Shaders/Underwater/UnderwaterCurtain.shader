@@ -47,11 +47,13 @@ Shader "Crest/Underwater Curtain"
 
 			#include "UnityCG.cginc"
 			#include "Lighting.cginc"
-			#include "../OceanExternal.hlsl"
+
+			#include "../OceanGlobals.hlsl"
+			#include "../OceanInputsDriven.hlsl"
 			#include "../OceanLODData.hlsl"
+			#include "../OceanHelpersNew.hlsl"
 			#include "UnderwaterShared.hlsl"
 
-			float _CrestTime;
 			float _HeightOffset;
 
 			#include "../OceanEmission.hlsl"
@@ -177,20 +179,15 @@ Shader "Crest/Underwater Curtain"
 				const half3 n_pixel = 0.0;
 				const half3 bubbleCol = 0.0;
 
-				float3 surfaceAboveCamPosWorld = 0.0;
+				float3 dummy = 0.0;
 				half sss = 0.;
 				const float3 uv_slice = WorldToUV(_WorldSpaceCameraPos.xz);
-				SampleDisplacements(_LD_TexArray_AnimatedWaves, uv_slice, 1.0, surfaceAboveCamPosWorld, sss);
-				surfaceAboveCamPosWorld.y += _OceanCenterPosWorld.y;
+				SampleDisplacements(_LD_TexArray_AnimatedWaves, uv_slice, 1.0, dummy, sss);
 
 				// depth and shadow are computed in ScatterColour when underwater==true, using the LOD1 texture.
 				const float depth = 0.0;
 
-				half shadow;
-
-#if defined(USE_EXTERNAL_SHADERS)
-
-				shadow = OceanExternalShadow(input.positionWS, 1.0);
+				const half3 scatterCol = ScatterColour(depth, _WorldSpaceCameraPos, lightDir, view, shadow, true, true, sss);
 
 #else
 

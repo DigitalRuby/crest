@@ -20,8 +20,6 @@ namespace Crest
         [Range(0f, 1f), SerializeField]
         float _noiseAmp = 0.5f;
 
-        [Range(-1f, 1f), SerializeField]
-        float _weight = 1f;
         [Range(0f, 2f), SerializeField]
         float _weightUpDownMul = 0.5f;
 
@@ -40,7 +38,8 @@ namespace Crest
         RegisterDynWavesInput _dynWavesInput;
         FloatingObjectBase _boat;
         Vector3 _posLast;
-        SamplingData _samplingDataFlow = new SamplingData();
+
+        SampleFlowHelper _sampleFlowHelper = new SampleFlowHelper();
 
         Renderer _renderer;
         MaterialPropertyBlock _mpb;
@@ -49,6 +48,13 @@ namespace Crest
         {
             if (OceanRenderer.Instance == null || !OceanRenderer.Instance.CreateDynamicWaveSim)
             {
+                enabled = false;
+                return;
+            }
+
+            if (transform.parent == null)
+            {
+                Debug.LogError("ObjectWaterInteraction script requires a parent GameObject.", this);
                 enabled = false;
                 return;
             }
@@ -66,15 +72,13 @@ namespace Crest
             _boat = GetComponentInParent<FloatingObjectBase>();
             if (_boat == null)
             {
-                Debug.LogError("FloatingObjectBase required. Disabling FeedVelocityToExtrude.", this);
-                enabled = false;
-                return;
+                _boat = transform.parent.gameObject.AddComponent<ObjectWaterInteractionAdaptor>();
             }
 
             _renderer = GetComponent<Renderer>();
             if (_renderer == null)
             {
-                Debug.Log("ObjectWaterInteraction script requires Renderer component.", this);
+                Debug.LogError("ObjectWaterInteraction script requires Renderer component.", this);
                 enabled = false;
                 return;
             }
@@ -122,20 +126,12 @@ namespace Crest
                 vel = Vector3.zero;
             }
 
-            if (ocean._simSettingsFlow != null &&
-                ocean._simSettingsFlow._readbackData &&
-                GPUReadbackFlow.Instance)
+            if (QueryFlow.Instance)
             {
-                var position = transform.position;
-                var samplingArea = new Rect(position.x, position.z, 0f, 0f);
-                GPUReadbackFlow.Instance.GetSamplingData(ref samplingArea, _boat.ObjectWidth, _samplingDataFlow);
-
-                Vector2 surfaceFlow;
-                GPUReadbackFlow.Instance.SampleFlow(ref position, _samplingDataFlow, out surfaceFlow);
-
+                _sampleFlowHelper.Init(transform.position, _boat.ObjectWidth);
+                Vector2 surfaceFlow = Vector2.zero;
+                _sampleFlowHelper.Sample(ref surfaceFlow);
                 vel -= new Vector3(surfaceFlow.x, 0, surfaceFlow.y);
-
-                GPUReadbackFlow.Instance.ReturnSamplingData(_samplingDataFlow);
             }
             vel.y *= _weightUpDownMul;
 
@@ -163,7 +159,7 @@ namespace Crest
 
             float dt; int steps;
             ocean._lodDataDynWaves.GetSimSubstepData(ocean.DeltaTimeDynamics, out steps, out dt);
-            float weight = _boat.InWater ? _weight / simsActive : 0f;
+            float weight = _boat.InWater ? 1f / simsActive : 0f;
 
             _renderer.GetPropertyBlock(_mpb);
 

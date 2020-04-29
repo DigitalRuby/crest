@@ -2,13 +2,14 @@
 
 // This file is subject to the MIT License as seen in the root of this folder structure (LICENSE)
 
+#ifndef CREST_OCEAN_EMISSION_INCLUDED
+#define CREST_OCEAN_EMISSION_INCLUDED
+
 uniform half3 _Diffuse;
 uniform half3 _DiffuseGrazing;
 
 // this is copied from the render target by unity
 uniform sampler2D _CameraOpaqueTexture;
-
-#define DEPTH_OUTSCATTER_CONSTANT 0.25
 
 #if _TRANSPARENCY_ON
 uniform half _RefractionStrength;
@@ -20,7 +21,6 @@ uniform half3 _SubSurfaceColour;
 uniform half _SubSurfaceBase;
 uniform half _SubSurfaceSun;
 uniform half _SubSurfaceSunFallOff;
-uniform half3 _SubSurfaceCrestColour;
 #endif // _SUBSURFACESCATTERING_ON
 
 #if _SUBSURFACESHALLOWCOLOUR_ON
@@ -48,7 +48,7 @@ uniform half3 _DiffuseShadow;
 #endif
 
 half3 ScatterColour(
-	in const float3 i_surfaceWorldPos, in const half i_surfaceOceanDepth, in const float3 i_cameraPos,
+	in const half i_surfaceOceanDepth, in const float3 i_cameraPos,
 	in const half3 i_lightDir, in const half3 i_view, in const fixed i_shadow,
 	in const bool i_underwater, in const bool i_outscatterLight, half sss)
 {
@@ -66,12 +66,21 @@ half3 ScatterColour(
 		depth = CREST_OCEAN_DEPTH_BASELINE;
 		SampleSeaDepth(_LD_TexArray_SeaFloorDepth, uv_smallerLod, 1.0, depth);
 
-		// Huw: knocking this out for now as it seems to produce intense strobing when underwater.
-//#if _SHADOWS_ON
-//		half2 shadowSoftHard = 0.0;
-//		SampleShadow(_LD_TexArray_Shadow, uv_smallerLod, 1.0, shadowSoftHard);
-//		shadow = 1.0 - shadowSoftHard.x;
-//#endif
+#if _SHADOWS_ON
+		const float2 samplePoint = i_cameraPos.xz;
+
+		// Pick lower res data for shadowing, helps to smooth out artifacts slightly
+		const float minSliceIndex = 4.0;
+		uint slice0, slice1; float lodAlpha;
+		PosToSliceIndices(samplePoint, minSliceIndex, _InstanceData.x, _LD_Pos_Scale[0].z, slice0, slice1, lodAlpha);
+
+		half2 shadowSoftHard = 0.0;
+		// TODO - fix data type of slice index in WorldToUV - #343
+		SampleShadow(_LD_TexArray_Shadow, WorldToUV(samplePoint, slice0), 1.0 - lodAlpha, shadowSoftHard);
+		SampleShadow(_LD_TexArray_Shadow, WorldToUV(samplePoint, slice1), lodAlpha, shadowSoftHard);
+
+		shadow = saturate(1.0 - shadowSoftHard.x);
+#endif
 	}
 	else
 	{
@@ -111,17 +120,6 @@ half3 ScatterColour(
 	}
 #endif // _SUBSURFACESCATTERING_ON
 
-	// outscatter light - attenuate the final colour by the camera depth under the water, to approximate less
-	// throughput due to light scatter as the camera gets further under water.
-	if (i_outscatterLight)
-	{
-		half camDepth = max(_OceanCenterPosWorld.y - _WorldSpaceCameraPos.y, 0.0);
-		if (i_underwater)
-		{
-			col *= exp(-_DepthFogDensity.xyz * camDepth * DEPTH_OUTSCATTER_CONSTANT);
-		}
-	}
-
 	return col;
 }
 
@@ -144,7 +142,7 @@ void ApplyCaustics(in const half3 i_view, in const half3 i_lightDir, in const fl
 	// Compute mip index manually, with bias based on sea floor depth. We compute it manually because if it is computed automatically it produces ugly patches
 	// where samples are stretched/dilated. The bias is to give a focusing effect to caustics - they are sharpest at a particular depth. This doesn't work amazingly
 	// well and could be replaced.
-	float mipLod = log2(i_sceneZ) + abs(sceneDepth - _CausticsFocalDepth) / _CausticsDepthOfField;
+	float mipLod = log2(max(i_sceneZ, 1.0)) + abs(sceneDepth - _CausticsFocalDepth) / _CausticsDepthOfField;
 	// project along light dir, but multiply by a fudge factor reduce the angle bit - compensates for fact that in real life
 	// caustics come from many directions and don't exhibit such a strong directonality
 	float2 surfacePosXZ = scenePos.xz + i_lightDir.xz * sceneDepth / (4.*i_lightDir.y);
@@ -173,8 +171,8 @@ void ApplyCaustics(in const half3 i_view, in const half3 i_lightDir, in const fl
 	}
 #endif // _SHADOWS_ON
 
-	io_sceneColour *= 1.0 + causticsStrength *
-		(0.5*tex2Dlod(_CausticsTexture, cuv1).x + 0.5*tex2Dlod(_CausticsTexture, cuv2).x - _CausticsTextureAverage);
+	io_sceneColour.xyz *= 1.0 + causticsStrength *
+		(0.5*tex2Dlod(_CausticsTexture, cuv1).xyz + 0.5*tex2Dlod(_CausticsTexture, cuv2).xyz - _CausticsTextureAverage);
 }
 #endif // _CAUSTICS_ON
 
@@ -242,3 +240,4 @@ half3 OceanEmission(in const half3 i_view, in const half3 i_n_pixel, in const fl
 	return col;
 }
 
+#endif // CREST_OCEAN_EMISSION_INCLUDED
