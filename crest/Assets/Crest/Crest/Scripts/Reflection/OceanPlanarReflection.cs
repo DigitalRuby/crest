@@ -388,7 +388,7 @@ namespace Crest
 
         private void CameraPreCull(Camera camera)
         {
-            if (!gameObject.activeInHierarchy || WeatherMakerCommandBufferManagerScript.CameraStack > 1 || WeatherMakerScript.ShouldIgnoreCamera(this, camera, true))
+            if (!gameObject.activeInHierarchy || WeatherMakerCommandBufferManagerScript.CameraStackCount > 1 || WeatherMakerScript.ShouldIgnoreCamera(this, camera, true))
             {
                 return;
             }
