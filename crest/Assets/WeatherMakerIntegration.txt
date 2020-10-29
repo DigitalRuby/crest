@@ -1,8 +1,9 @@
-Here are the changes made to make crest work with Weather Maker:
+Here are the changes made to make crest work with Weather Maker. I've already done these in this fork, just keeping them here for documentation.
+
+The one thing you must do is add an assembly definition for Weather Maker to the WeatherMaker/Prefab/Scripts folder, then add it as a reference to crests assembly definition file located in Crest/Scripts. Alternatively, you can just delete all .asmdef files.
+
 
 --- PROJECT CHANGES ---
-
-- To get crest to see Weather Maker, you need to add an assembly definition for Weather Maker to the WeatherMaker/Prefab/Scripts folder, then add it as a reference to crests assembly definition file located in Crest/Scripts.
 
 - Enable planar reflection in crest by adding planar reflection to camera
 
